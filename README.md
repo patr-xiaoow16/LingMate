@@ -13,11 +13,32 @@
 
 ```bash
 cd backend
-. .venv/bin/activate
-uvicorn app.main:app --reload
+python3 main.py
 ```
 
 默认地址：`http://127.0.0.1:8000`
+
+`backend/main.py` 会优先自动使用项目内的 `.venv` Python。
+如果是第一次初始化环境，请先安装依赖：
+
+```bash
+cd backend
+. .venv/bin/activate
+python3 -m pip install -r requirements.txt
+```
+
+可选环境变量：
+
+- `HOST`：默认 `127.0.0.1`
+- `PORT`：默认 `8000`
+- `RELOAD`：默认 `true`
+
+如果你仍然想用原来的方式，也可以执行：
+
+```bash
+cd backend
+uvicorn app.main:app --reload
+```
 
 ### 2. 启动前端
 
