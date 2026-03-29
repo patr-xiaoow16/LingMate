@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -12,6 +12,24 @@ router = APIRouter()
 @router.post("/import", status_code=status.HTTP_201_CREATED)
 def import_material(payload: ImportMaterialRequest, db: Session = Depends(get_db)) -> dict:
     return lesson_service.import_material(db, payload)
+
+
+@router.post("/import/audio", status_code=status.HTTP_201_CREATED)
+async def import_audio(
+    file: UploadFile = File(...),
+    mode: str = Form(default="audio_upload"),
+    db: Session = Depends(get_db),
+) -> dict:
+    _ = mode
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="上传文件为空。")
+    return lesson_service.import_uploaded_audio(
+        db,
+        file_name=file.filename or "audio.bin",
+        mime_type=file.content_type or "application/octet-stream",
+        content=content,
+    )
 
 
 @router.get("/lessons/{lesson_id}/analysis")
@@ -51,6 +69,31 @@ def coach_module(
 ) -> dict:
     try:
         return lesson_service.coach_module(db, lesson_id, module_key, payload)
+    except LessonNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/lessons/{lesson_id}/notes")
+def submit_note(
+    lesson_id: str,
+    payload: ModuleActionRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        module_key = payload.label or "1"
+        return lesson_service.submit_note(db, lesson_id, module_key, payload)
+    except LessonNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete("/lessons/{lesson_id}/notes/{submission_id}")
+def delete_note(
+    lesson_id: str,
+    submission_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        return lesson_service.delete_note(db, lesson_id, submission_id)
     except LessonNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

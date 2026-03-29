@@ -19,6 +19,14 @@
           <span class="chip chip-soft">当前步骤：{{ data.pipeline.activeStepTitle || "启动中" }}</span>
           <span class="subtle-label">{{ data.mockMeta?.provider || "mock" }} · {{ data.mockMeta?.elapsedSeconds ?? 0 }}s / {{ data.mockMeta?.totalDurationSeconds ?? 0 }}s</span>
         </div>
+        <div v-if="data.status === 'failed'" class="banner banner-warning">
+          {{ data.summary.description }}
+        </div>
+        <div v-if="data.status === 'failed' && data.recoveryAction" class="button-row">
+          <button class="btn btn-secondary" @click="handleRecoveryAction">
+            {{ data.recoveryAction.label }}
+          </button>
+        </div>
         <div class="split-row">
           <span class="subtle-label">生成进度</span>
           <span class="progress-value">{{ data.pipeline.progress }}%</span>
@@ -81,7 +89,7 @@
         </div>
 
         <button class="btn btn-primary analysis-start-btn" :class="{ ready: data.analysisReady }" :disabled="!data.analysisReady" @click="startLesson">
-          {{ data.analysisReady ? "开始本课" : "AI 正在处理中..." }}
+          {{ data.analysisReady ? "开始本课" : data.status === "failed" ? "分析失败" : "AI 正在处理中..." }}
         </button>
       </article>
     </section>
@@ -128,10 +136,16 @@ onUnmounted(() => {
 
 async function fetchAnalysis() {
   data.value = await api.getAnalysis(props.lessonId);
-  if (data.value?.analysisReady && pollTimer) {
+  if ((data.value?.analysisReady || data.value?.status === "failed") && pollTimer) {
     window.clearInterval(pollTimer);
     pollTimer = null;
   }
+}
+
+function handleRecoveryAction() {
+  const action = data.value?.recoveryAction;
+  if (!action || action.type !== "open_url" || !action.url || typeof window === "undefined") return;
+  window.open(action.url, "lingmate-youtube-login", "popup=yes,width=960,height=760");
 }
 
 function startPolling() {

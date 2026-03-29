@@ -17,7 +17,7 @@
         <article class="surface-card material-card">
           <p class="eyebrow">Current material</p>
           <h2 class="subsection-title">{{ data.material.title }}</h2>
-          <p class="metric-note">{{ data.material.description }}</p>
+          <p class="metric-note material-source">{{ data.material.sourceLabel || data.material.description }}</p>
           <div class="chip-row">
             <span v-for="chip in data.material.chips" :key="chip" class="chip">{{ chip }}</span>
           </div>
@@ -59,9 +59,11 @@
           <div class="module-content">
             <template v-for="section in activeModule.topCard.sections" :key="JSON.stringify(section)">
               <div v-if="section.type === 'player'" class="player-row">
-                <button class="play-button" :disabled="isSubmitting" @click="handleMockAction('play', '开始播放')">▶</button>
+                <button class="play-button" :disabled="isSubmitting" @click="toggleAudioPlayback">
+                  {{ isPlaying ? "❚❚" : "▶" }}
+                </button>
                 <div class="progress-track">
-                  <span :style="{ width: `${section.progress}%` }"></span>
+                  <span :style="{ width: `${resolvedPlayerProgress(section)}%` }"></span>
                 </div>
               </div>
 
@@ -297,20 +299,73 @@
       </main>
 
       <aside class="coach-column">
-        <article v-for="card in activeModule.coachCards" :key="card.title" class="surface-card coach-card">
-          <h3 class="subsection-title">{{ card.title }}</h3>
-          <p class="metric-note whitespace">{{ card.body }}</p>
-          <div class="chip-row">
-            <span v-for="tag in card.tags" :key="tag" class="chip">{{ tag }}</span>
+        <article class="surface-card coach-card ai-note-card">
+          <div>
+            <p class="eyebrow">AI NOTES</p>
+            <h3 class="subsection-title">{{ data.notePanel?.title || "AI随记" }}</h3>
+            <p class="metric-note whitespace">{{ data.notePanel?.subtitle }}</p>
+          </div>
+
+          <div class="note-thread">
+            <div v-if="!noteEntries.length" class="soft-panel note-empty-state">
+              <p class="panel-text">
+                这里可以边听边记。把你此刻听到的感觉、没听清的句子、想到的表达，甚至是模糊的猜测都写下来，AI 会继续陪你往下拆。
+              </p>
+            </div>
+
+            <div v-for="entry in noteEntries" :key="entry.submissionId" class="note-thread-item">
+              <div class="note-bubble note-user">
+                <div class="split-row align-start note-bubble-header">
+                  <p class="eyebrow">{{ entry.user.role }} · Module {{ entry.moduleKey }}</p>
+                  <button class="note-delete-btn" :disabled="isNoteSubmitting" @click="deleteNote(entry.submissionId)">
+                    删除
+                  </button>
+                </div>
+                <p class="panel-text whitespace">{{ entry.user.content }}</p>
+                <p class="subtle-label">{{ entry.createdAt }}</p>
+              </div>
+              <div class="note-bubble note-ai">
+                <p class="eyebrow">{{ entry.assistant.role }}</p>
+                <p class="panel-text whitespace">{{ entry.assistant.content }}</p>
+                <div v-if="entry.assistant.suggestions?.length" class="chip-row">
+                  <span v-for="suggestion in entry.assistant.suggestions" :key="suggestion" class="chip chip-soft">
+                    {{ suggestion }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="note-composer">
+            <textarea
+              v-model="noteInput"
+              :placeholder="data.notePanel?.placeholder"
+              rows="5"
+              :disabled="isNoteSubmitting"
+            />
+            <div class="button-row note-actions">
+              <button class="btn btn-primary" :disabled="isNoteSubmitting || !noteInput.trim()" @click="submitNote">
+                {{ isNoteSubmitting ? "AI 正在回应..." : "记下并请 AI 回复" }}
+              </button>
+            </div>
           </div>
         </article>
       </aside>
     </section>
+    <audio
+      v-if="data?.material?.audioUrl"
+      ref="audioRef"
+      :src="resolvedAudioUrl"
+      preload="metadata"
+      @timeupdate="handleAudioTimeUpdate"
+      @ended="handleAudioEnded"
+      @loadedmetadata="handleAudioTimeUpdate"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import { api } from "../lib/api";
@@ -328,13 +383,30 @@ const data = ref(null);
 const currentIndex = ref(1);
 const interactionMessage = ref("");
 const isSubmitting = ref(false);
+const isNoteSubmitting = ref(false);
+const noteInput = ref("");
+const audioRef = ref(null);
+const isPlaying = ref(false);
+const audioProgress = ref(0);
 
 const activeModule = computed(() =>
-  data.value?.modules.find((module) => module.index === currentIndex.value),
+  data.value?.modules.find((module) => normalizeModuleIndex(module.index) === currentIndex.value),
 );
+const noteEntries = computed(() => data.value?.notePanel?.entries || []);
+const resolvedAudioUrl = computed(() => {
+  const raw = data.value?.material?.audioUrl;
+  if (!raw) return "";
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  return `http://127.0.0.1:8000${raw}`;
+});
 
 onMounted(async () => {
   await loadWorkspace();
+});
+
+onUnmounted(() => {
+  if (!audioRef.value) return;
+  audioRef.value.pause();
 });
 
 watch(
@@ -349,6 +421,48 @@ function buttonClass(kind) {
   if (kind === "primary") return "btn-primary";
   if (kind === "soft") return "btn-soft";
   return "btn-secondary";
+}
+
+function normalizeModuleIndex(value) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) ? parsed : 1;
+}
+
+function resolvedPlayerProgress(section) {
+  if (data.value?.material?.audioUrl) return audioProgress.value;
+  return section.progress ?? 0;
+}
+
+async function toggleAudioPlayback() {
+  if (!data.value?.material?.audioUrl || !audioRef.value) {
+    await handleMockAction("play", "开始播放");
+    return;
+  }
+
+  if (audioRef.value.paused) {
+    await audioRef.value.play();
+    isPlaying.value = true;
+    interactionMessage.value = "正在播放上传音频。";
+    return;
+  }
+
+  audioRef.value.pause();
+  isPlaying.value = false;
+  interactionMessage.value = "已暂停播放。";
+}
+
+function handleAudioTimeUpdate() {
+  if (!audioRef.value || !Number.isFinite(audioRef.value.duration) || audioRef.value.duration <= 0) {
+    audioProgress.value = 0;
+    return;
+  }
+  audioProgress.value = Math.min(100, (audioRef.value.currentTime / audioRef.value.duration) * 100);
+}
+
+function handleAudioEnded() {
+  isPlaying.value = false;
+  audioProgress.value = 100;
+  interactionMessage.value = "音频播放完成，可以继续下一步。";
 }
 
 async function handlePrimaryAdvance() {
@@ -379,6 +493,41 @@ async function handlePrimaryAdvance() {
 function handleAction(action) {
   if (action.kind === "primary") return handlePrimaryAdvance();
   return handleMockAction(action.kind || "interact", action.label);
+}
+
+async function submitNote() {
+  if (isNoteSubmitting.value || !noteInput.value.trim()) return;
+  isNoteSubmitting.value = true;
+  try {
+    const result = await api.submitNote(props.lessonId, currentIndex.value, noteInput.value.trim());
+    if (data.value?.notePanel) {
+      data.value.notePanel.entries = result.entries || [];
+    }
+    interactionMessage.value = result.message || "AI 随记已更新。";
+    noteInput.value = "";
+  } catch (error) {
+    interactionMessage.value = "AI 随记提交失败，请稍后重试。";
+    console.error(error);
+  } finally {
+    isNoteSubmitting.value = false;
+  }
+}
+
+async function deleteNote(submissionId) {
+  if (!submissionId || isNoteSubmitting.value) return;
+  isNoteSubmitting.value = true;
+  try {
+    const result = await api.deleteNote(props.lessonId, submissionId);
+    if (data.value?.notePanel) {
+      data.value.notePanel.entries = result.entries || [];
+    }
+    interactionMessage.value = result.message || "AI 随记已删除。";
+  } catch (error) {
+    interactionMessage.value = "删除 AI 随记失败，请稍后重试。";
+    console.error(error);
+  } finally {
+    isNoteSubmitting.value = false;
+  }
 }
 
 async function handleModuleSelect(index) {
@@ -434,8 +583,18 @@ async function loadWorkspace() {
     const requestedModule = Number.parseInt(String(route.query.module || ""), 10);
     const moduleIndex = Number.isFinite(requestedModule) ? requestedModule : null;
     data.value = await api.getWorkspace(props.lessonId, moduleIndex);
-    currentIndex.value = data.value.progress.current || currentIndex.value;
+    data.value.modules = (data.value.modules || []).map((module, idx) => ({
+      ...module,
+      index: normalizeModuleIndex(module.index ?? idx + 1),
+    }));
+    currentIndex.value = normalizeModuleIndex(data.value.progress.current || currentIndex.value);
     interactionMessage.value = data.value.interaction?.lastAction || interactionMessage.value;
+    audioProgress.value = 0;
+    isPlaying.value = false;
+    if (audioRef.value) {
+      audioRef.value.pause();
+      audioRef.value.currentTime = 0;
+    }
   } catch (error) {
     interactionMessage.value = "工作台内容加载失败，请检查后端是否正在运行。";
     console.error(error);

@@ -4,6 +4,9 @@ from pydantic import BaseModel, Field
 class SourcePayload(BaseModel):
     type: str = "url"
     url: str = ""
+    transcript: str | None = None
+    fileName: str | None = None
+    mimeType: str | None = None
 
 
 class ImportMaterialRequest(BaseModel):

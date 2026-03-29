@@ -66,10 +66,114 @@
             </div>
           </div>
         </article>
+
+        <article v-if="data.aiNotes?.length" class="surface-card">
+          <div class="split-row">
+            <h2 class="section-title">AI 随记回放</h2>
+            <span class="chip">课堂过程</span>
+          </div>
+          <div class="report-note-list">
+            <div v-for="entry in data.aiNotes" :key="entry.submissionId" class="report-note-item">
+              <div class="report-note-bubble report-note-user">
+                <div class="split-row">
+                  <p class="eyebrow">{{ entry.user.role }} · Module {{ entry.moduleKey }}</p>
+                  <span class="chip chip-soft">{{ entry.emotion?.label }}</span>
+                </div>
+                <p class="panel-text whitespace">{{ entry.user.content }}</p>
+                <p class="subtle-label">{{ entry.createdAt }}</p>
+              </div>
+              <div class="report-note-bubble report-note-ai">
+                <p class="eyebrow">{{ entry.assistant.role }}</p>
+                <p class="panel-text whitespace">{{ entry.assistant.content }}</p>
+                <div v-if="entry.assistant.suggestions?.length" class="chip-row">
+                  <span v-for="suggestion in entry.assistant.suggestions" :key="suggestion" class="chip chip-soft">
+                    {{ suggestion }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
       </div>
 
       <div class="report-side-column">
-        <article class="surface-card">
+        <article v-if="data.learningJourney" class="surface-card compact-report-card">
+          <div class="split-row">
+            <h2 class="section-title">学习情绪与模块时长</h2>
+            <span class="chip">同图呈现</span>
+          </div>
+          <p class="metric-note">
+            看看你在哪个模块最卡，又是从哪一段开始稳下来。
+          </p>
+          <div class="journey-chart compact-journey-chart">
+            <div class="journey-chart-grid compact-journey-grid">
+              <div
+                v-for="(item, index) in data.learningJourney.labels"
+                :key="item"
+                class="journey-chart-col"
+              >
+                <div class="journey-bar-wrap">
+                  <span
+                    class="journey-bar"
+                    :style="{ height: `${durationHeight(data.learningJourney.durationMinutes[index])}px` }"
+                  ></span>
+                </div>
+                <div class="journey-meta">
+                  <strong>{{ item }}</strong>
+                  <small>{{ data.learningJourney.durationMinutes[index] }}m</small>
+                  <span class="journey-emotion-chip" :class="emotionToneClass(data.learningJourney.emotionLabels[index])">
+                    {{ data.learningJourney.emotionLabels[index] }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article v-if="data.learningJourney" class="surface-card compact-report-card">
+          <div class="split-row">
+            <h2 class="section-title">学习效率曲线</h2>
+            <span class="chip">定义已说明</span>
+          </div>
+          <p class="metric-note">{{ data.learningJourney.efficiencyDefinition }}</p>
+          <div class="efficiency-chart compact-efficiency-chart">
+            <div class="efficiency-chart-board compact-efficiency-board">
+              <svg class="efficiency-line-chart compact-efficiency-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                <polyline
+                  :points="efficiencyPolylinePoints(data.learningJourney.efficiencyScores)"
+                  fill="none"
+                  stroke="#315f4c"
+                  stroke-width="2.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <circle
+                  v-for="(point, index) in efficiencyChartPoints(data.learningJourney.efficiencyScores)"
+                  :key="`${point.x}-${point.y}-${index}`"
+                  :cx="point.x"
+                  :cy="point.y"
+                  r="2.8"
+                  fill="#315f4c"
+                />
+              </svg>
+              <div class="efficiency-x-axis">
+                <div
+                  v-for="(label, index) in data.learningJourney.labels"
+                  :key="`${label}-${index}`"
+                  class="efficiency-axis-item"
+                >
+                  <strong>{{ label }}</strong>
+                  <small>{{ data.learningJourney.efficiencyScores[index] }}</small>
+                </div>
+              </div>
+            </div>
+            <p class="metric-note">
+              效率最高：{{ highestEfficiencyLabel(data.learningJourney) }}
+            </p>
+          </div>
+        </article>
+
+        <article class="surface-card compact-report-card">
           <div class="split-row">
             <h2 class="section-title">今日复习队列</h2>
             <span class="chip">Ebbinghaus</span>
@@ -103,9 +207,6 @@
               </span>
             </div>
           </div>
-          <p class="metric-note">
-            这张卡既能作为分享素材，也能成为用户愿意保留的学习记忆点。
-          </p>
           <p v-if="snapshotMessage" class="metric-note">{{ snapshotMessage }}</p>
           <div class="button-row">
             <button class="btn btn-primary" :disabled="isSavingSnapshot" @click="saveSnapshot">
@@ -140,6 +241,47 @@ const snapshotMessage = ref("");
 onMounted(async () => {
   data.value = await api.getReport(props.lessonId);
 });
+
+function durationHeight(value) {
+  const max = Math.max(...(data.value?.learningJourney?.durationMinutes || [1]), 1);
+  return Math.max(8, (Number(value || 0) / max) * 60);
+}
+
+function emotionToneClass(label) {
+  if (label === "挫败" || label === "困惑") return "emotion-negative";
+  if (label === "投入" || label === "兴奋") return "emotion-positive";
+  return "emotion-neutral";
+}
+
+function efficiencyChartPoints(scores) {
+  const values = Array.isArray(scores) ? scores : [];
+  if (!values.length) return [];
+  const step = 100 / Math.max(values.length - 1, 1);
+  return values.map((score, index) => {
+    const normalized = Math.max(0, Math.min(100, Number(score || 0))) / 100;
+    return {
+      x: Number((index * step).toFixed(2)),
+      y: Number((92 - normalized * 72).toFixed(2)),
+    };
+  });
+}
+
+function efficiencyPolylinePoints(scores) {
+  return efficiencyChartPoints(scores)
+    .map((point) => `${point.x},${point.y}`)
+    .join(" ");
+}
+
+function highestEfficiencyLabel(journey) {
+  const scores = journey?.efficiencyScores || [];
+  const labels = journey?.labels || [];
+  if (!scores.length || !labels.length) return "暂无";
+  let maxIndex = 0;
+  scores.forEach((score, index) => {
+    if (score > scores[maxIndex]) maxIndex = index;
+  });
+  return `${labels[maxIndex]}（${scores[maxIndex]}）`;
+}
 
 function wrapText(context, text, maxWidth) {
   const paragraphs = String(text || "").split("\n");
