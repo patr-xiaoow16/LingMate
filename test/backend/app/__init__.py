@@ -1,0 +1,1 @@
+"""LingMate backend application package."""
