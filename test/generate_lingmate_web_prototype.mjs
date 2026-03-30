@@ -1481,19 +1481,197 @@ const queueRow = ({ title, meta, fill = "$--card" }) =>
     ],
   });
 
-const makeReviewScreen = (x, y) =>
-  appScreen({
-    name: "LingMate / Review",
+const timelineRow = ({ date, title, note, dividerLine = true }) =>
+  hStack({
+    width: 764,
+    gap: 18,
+    padding: [14, 0],
+    alignItems: "start",
+    stroke: dividerLine ? { align: "inside", thickness: { bottom: 1 }, fill: "$--border" } : undefined,
+    children: [
+      text({
+        width: 94,
+        content: date,
+        fill: "$--muted-foreground",
+        fontFamily: "$--font-secondary",
+        fontSize: 13,
+        fontWeight: "600",
+        lineHeight: 1.4,
+      }),
+      vStack({
+        width: 652,
+        gap: 4,
+        children: [
+          text({
+            width: 652,
+            content: title,
+            fill: "$--foreground",
+            textGrowth: "fixed-width",
+            fontFamily: "$--font-secondary",
+            fontSize: 15,
+            fontWeight: "600",
+            lineHeight: 1.4,
+          }),
+          text({
+            width: 652,
+            content: note,
+            fill: "$--muted-foreground",
+            textGrowth: "fixed-width",
+            fontFamily: "$--font-secondary",
+            fontSize: 14,
+            fontWeight: "normal",
+            lineHeight: 1.45,
+          }),
+        ],
+      }),
+    ],
+  });
+
+const emotionChip = (label) => {
+  const tone =
+    label === "挫败" || label === "困惑"
+      ? { fill: "$--color-error", textFill: "$--color-error-foreground" }
+      : label === "投入" || label === "兴奋"
+        ? { fill: "$--color-success", textFill: "$--color-success-foreground" }
+        : { fill: "$--secondary", textFill: "$--foreground" };
+
+  return pill({ label, fill: tone.fill, textFill: tone.textFill, padding: [6, 10] });
+};
+
+const noteBubble = ({
+  eyebrow,
+  emotion,
+  content,
+  meta,
+  suggestions,
+  fill = "$--card",
+  width = 724,
+}) =>
+  vStack({
+    width,
+    gap: 12,
+    padding: 18,
+    fill,
+    stroke: { align: "inside", thickness: 1, fill: "$--border" },
+    cornerRadius: 22,
+    children: [
+      hStack({
+        width: width - 36,
+        justifyContent: "space_between",
+        alignItems: "center",
+        children: [
+          sectionLabel(eyebrow, width - 152),
+          emotion ? emotionChip(emotion) : rect({ width: 1, height: 1, fill: "#00000000" }),
+        ],
+      }),
+      bodyText(content, width - 36, 14, "$--foreground"),
+      meta
+        ? text({
+            width: width - 36,
+            content: meta,
+            fill: "$--muted-foreground",
+            textGrowth: "fixed-width",
+            fontFamily: "$--font-secondary",
+            fontSize: 12,
+            fontWeight: "500",
+            lineHeight: 1.35,
+          })
+        : undefined,
+      suggestions?.length
+        ? hStack({
+            gap: 8,
+            children: suggestions.map((suggestion) =>
+              pill({ label: suggestion, fill: "$--secondary", textFill: "$--foreground", padding: [6, 10] }),
+            ),
+          })
+        : undefined,
+    ].filter(Boolean),
+  });
+
+const aiNotePair = ({ module, emotion, user, assistant, createdAt, suggestions, highlight = false }) =>
+  vStack({
+    width: 764,
+    gap: 12,
+    children: [
+      noteBubble({
+        eyebrow: `Learner · Module ${module}`,
+        emotion,
+        content: user,
+        meta: createdAt,
+        fill: highlight ? "$--secondary" : "$--card",
+        width: 764,
+      }),
+      noteBubble({
+        eyebrow: "LingMate coach",
+        content: assistant,
+        suggestions,
+        fill: "$--background",
+        width: 724,
+      }),
+    ],
+  });
+
+const journeyColumn = ({ label, minutes, height, emotion }) =>
+  vStack({
+    width: 44,
+    gap: 10,
+    alignItems: "center",
+    children: [
+      vStack({
+        width: 44,
+        height: 92,
+        justifyContent: "end",
+        alignItems: "center",
+        children: [rect({ width: 20, height, fill: "$--primary", cornerRadius: 999 })],
+      }),
+      text({
+        content: label,
+        fill: "$--foreground",
+        fontFamily: "$--font-secondary",
+        fontSize: 12,
+        fontWeight: "700",
+        lineHeight: 1,
+      }),
+      text({
+        content: `${minutes}m`,
+        fill: "$--muted-foreground",
+        fontFamily: "$--font-secondary",
+        fontSize: 11,
+        fontWeight: "500",
+        lineHeight: 1,
+      }),
+      emotionChip(emotion),
+    ],
+  });
+
+const dotMark = ({ x, y, fill = "$--primary", size = 10 }) =>
+  rect({
     x,
     y,
-    height: 1340,
+    width: size,
+    height: size,
+    fill,
+    cornerRadius: 999,
+  });
+
+const steppedConnector = ({ x, y, width, height, fill = "$--primary" }) => [
+  rect({ x, y, width, height: 3, fill, cornerRadius: 999 }),
+  rect({ x: x + width - 3, y: Math.min(y, y + height), width: 3, height: Math.abs(height) + 3, fill, cornerRadius: 999 }),
+];
+
+const makeReviewScreen = (x, y) =>
+  appScreen({
+    name: "LingMate / Learning Report",
+    x,
+    y,
+    height: 2000,
     children: [
-      appHeader({ subtitle: "Report and spaced review", primaryAction: "查看周报" }),
+      appHeader({ subtitle: "Learning report synced with current frontend", primaryAction: "开始今日复习" }),
       hStack({
         x: 64,
         y: 124,
         width: 1312,
-        height: 280,
+        height: 248,
         gap: 24,
         padding: 28,
         fill: "$--card",
@@ -1521,23 +1699,23 @@ const makeReviewScreen = (x, y) =>
             width: 508,
             gap: 14,
             children: [
-              metricCard({ title: "本周精听时长", value: "6.2h", note: "较上周 +18%，学习节奏更稳定。", width: 160 }),
-              metricCard({ title: "新增表达", value: "26", note: "其中 12 条已进入复习队列。", width: 160 }),
-              metricCard({ title: "平均完成模块", value: "6.1", note: "最常完成到输出练习。", width: 160 }),
+              metricCard({ title: "本课精听时长", value: "28.5m", note: "按 8 个模块的实际停留时长估算。", width: 160 }),
+              metricCard({ title: "新增表达", value: "14", note: "其中 6 条已进入今日复习队列。", width: 160 }),
+              metricCard({ title: "推进模块", value: "6 / 8", note: "本课最常推进到输出练习。", width: 160 }),
             ],
           }),
         ],
       }),
       vStack({
         x: 64,
-        y: 428,
-        width: 804,
-        height: 828,
+        y: 396,
+        width: 812,
+        height: 1536,
         gap: 24,
         children: [
           vStack({
-            width: 804,
-            height: 460,
+            width: 812,
+            height: 430,
             gap: 18,
             padding: 24,
             fill: "$--card",
@@ -1545,7 +1723,7 @@ const makeReviewScreen = (x, y) =>
             cornerRadius: 26,
             children: [
               hStack({
-                width: 756,
+                width: 764,
                 justifyContent: "space_between",
                 alignItems: "center",
                 children: [
@@ -1554,11 +1732,11 @@ const makeReviewScreen = (x, y) =>
                 ],
               }),
               hStack({
-                width: 756,
+                width: 764,
                 gap: 28,
                 children: [
                   vStack({
-                    width: 356,
+                    width: 364,
                     gap: 18,
                     children: [
                       chartBar({ label: "词汇掌握", value: "78%" }),
@@ -1594,8 +1772,8 @@ const makeReviewScreen = (x, y) =>
             ],
           }),
           vStack({
-            width: 804,
-            height: 344,
+            width: 812,
+            height: 330,
             gap: 16,
             padding: 24,
             fill: "$--card",
@@ -1603,70 +1781,81 @@ const makeReviewScreen = (x, y) =>
             cornerRadius: 26,
             children: [
               titleText("学习闭环记录", 240, 28),
-              ...[
-                ["03/24", "完成播客材料《Soft language at work》", "关键突破：委婉语气 + 连读识别"],
-                ["03/26", "复习表达 give you a heads-up", "已在新材料中再次遇到并正确理解"],
-                ["03/28", "输出练习：请假邮件", "用上了 call in sick / not feeling great / heads-up"],
-              ].map(([date, title, note], index) =>
-                hStack({
-                  width: 756,
-                  gap: 18,
-                  padding: [12, 0],
-                  alignItems: "start",
-                  stroke: index < 2 ? { align: "inside", thickness: { bottom: 1 }, fill: "$--border" } : undefined,
-                  children: [
-                    text({
-                      width: 86,
-                      content: date,
-                      fill: "$--muted-foreground",
-                      fontFamily: "$--font-secondary",
-                      fontSize: 13,
-                      fontWeight: "600",
-                      lineHeight: 1.4,
-                    }),
-                    vStack({
-                      width: 650,
-                      gap: 4,
-                      children: [
-                        text({
-                          width: 650,
-                          content: title,
-                          fill: "$--foreground",
-                          textGrowth: "fixed-width",
-                          fontFamily: "$--font-secondary",
-                          fontSize: 15,
-                          fontWeight: "600",
-                          lineHeight: 1.4,
-                        }),
-                        text({
-                          width: 650,
-                          content: note,
-                          fill: "$--muted-foreground",
-                          textGrowth: "fixed-width",
-                          fontFamily: "$--font-secondary",
-                          fontSize: 14,
-                          fontWeight: "normal",
-                          lineHeight: 1.4,
-                        }),
-                      ],
-                    }),
-                  ],
-                }),
-              ),
+              timelineRow({
+                date: "03/24",
+                title: "完成播客材料《Soft language at work》",
+                note: "关键突破：委婉语气 + 连读识别。",
+              }),
+              timelineRow({
+                date: "03/26",
+                title: "复习表达 give you a heads-up",
+                note: "已在新材料中再次遇到并正确理解。",
+              }),
+              timelineRow({
+                date: "本课过程",
+                title: "记录了 8 条 AI 随记",
+                note: "这些随记会保留你的听感、困惑和 AI 的即时回应，帮助你在报告页回看整节课的思路变化。",
+                dividerLine: false,
+              }),
+            ],
+          }),
+          vStack({
+            width: 812,
+            height: 728,
+            gap: 18,
+            padding: 24,
+            fill: "$--card",
+            stroke: { align: "inside", thickness: 1, fill: "$--border" },
+            cornerRadius: 26,
+            children: [
+              hStack({
+                width: 764,
+                justifyContent: "space_between",
+                alignItems: "center",
+                children: [
+                  titleText("AI 随记回放", 260, 28),
+                  pill({ label: "课堂过程", fill: "$--secondary" }),
+                ],
+              }),
+              aiNotePair({
+                module: "2",
+                emotion: "困惑",
+                user: "这里的 not feeling great 我能懂大概意思，但总觉得和 sick 不完全一样，语气上差别在哪？",
+                assistant: "你已经抓到了关键。not feeling great 更轻、更委婉，适合先描述状态；call in sick 则更接近正式请假动作。可以先感受语气，再决定场景。",
+                createdAt: "10:12 AM",
+                suggestions: ["委婉表达", "场景判断"],
+                highlight: true,
+              }),
+              aiNotePair({
+                module: "5",
+                emotion: "投入",
+                user: "我第二遍终于听到了 give you a heads-up 的连读，原来 heads-up 中间几乎黏在一起了。",
+                assistant: "这次不是背单词，而是把整块声音一起记住了。下次再遇到先抓节奏，再确认词块，会更稳。",
+                createdAt: "10:24 AM",
+                suggestions: ["整块识别", "跟读一遍"],
+              }),
+              aiNotePair({
+                module: "7",
+                emotion: "兴奋",
+                user: "输出练习里我写了 I'll give you a heads-up tomorrow，终于能自己用出来了。",
+                assistant: "很好，这说明表达已经开始迁移。下一步可以试着换一个更口语的工作场景，把时间和对象都换掉再说一次。",
+                createdAt: "10:39 AM",
+                suggestions: ["迁移练习", "换场景复述"],
+              }),
             ],
           }),
         ],
       }),
       vStack({
-        x: 892,
-        y: 428,
-        width: 484,
-        height: 890,
+        x: 900,
+        y: 396,
+        width: 476,
+        height: 1280,
         gap: 24,
         children: [
           vStack({
-            width: 484,
-            height: 396,
+            width: 476,
+            height: 340,
             gap: 16,
             padding: 24,
             fill: "$--card",
@@ -1674,19 +1863,141 @@ const makeReviewScreen = (x, y) =>
             cornerRadius: 26,
             children: [
               hStack({
-                width: 436,
+                width: 428,
                 justifyContent: "space_between",
                 alignItems: "center",
                 children: [
-                  titleText("今日复习队列", 220, 28),
+                  titleText("学习情绪与模块时长", 252, 26),
+                  pill({ label: "同图呈现", fill: "$--secondary" }),
+                ],
+              }),
+              bodyText("看看你在哪个模块最卡，又是从哪一段开始稳下来。", 428, 14),
+              hStack({
+                width: 428,
+                justifyContent: "space_between",
+                alignItems: "end",
+                children: [
+                  journeyColumn({ label: "M1", minutes: "3.2", height: 28, emotion: "平稳" }),
+                  journeyColumn({ label: "M2", minutes: "4.8", height: 42, emotion: "困惑" }),
+                  journeyColumn({ label: "M3", minutes: "3.6", height: 32, emotion: "投入" }),
+                  journeyColumn({ label: "M4", minutes: "2.9", height: 26, emotion: "平稳" }),
+                  journeyColumn({ label: "M5", minutes: "5.1", height: 46, emotion: "投入" }),
+                  journeyColumn({ label: "M6", minutes: "4.2", height: 38, emotion: "兴奋" }),
+                  journeyColumn({ label: "M7", minutes: "2.7", height: 24, emotion: "兴奋" }),
+                  journeyColumn({ label: "M8", minutes: "2.0", height: 18, emotion: "平稳" }),
+                ],
+              }),
+            ],
+          }),
+          vStack({
+            width: 476,
+            height: 286,
+            gap: 16,
+            padding: 24,
+            fill: "$--card",
+            stroke: { align: "inside", thickness: 1, fill: "$--border" },
+            cornerRadius: 26,
+            children: [
+              hStack({
+                width: 428,
+                justifyContent: "space_between",
+                alignItems: "center",
+                children: [
+                  titleText("学习效率曲线", 220, 26),
+                  pill({ label: "定义已说明", fill: "$--secondary" }),
+                ],
+              }),
+              bodyText("效率曲线 = 模块推进度 + 随记参与度 + 情绪恢复度 的综合分。分数越高，说明这一模块里你既有投入，也更快把困惑转成理解。", 428, 13),
+              frame(
+                {
+                  width: 428,
+                  height: 106,
+                  layout: "none",
+                },
+                [
+                  rect({ x: 0, y: 98, width: 428, height: 2, fill: "$--border" }),
+                  ...steppedConnector({ x: 22, y: 62, width: 46, height: 14 }),
+                  ...steppedConnector({ x: 68, y: 76, width: 46, height: -24 }),
+                  ...steppedConnector({ x: 114, y: 52, width: 46, height: 8 }),
+                  ...steppedConnector({ x: 160, y: 60, width: 46, height: -22 }),
+                  ...steppedConnector({ x: 206, y: 38, width: 46, height: 10 }),
+                  ...steppedConnector({ x: 252, y: 48, width: 46, height: -20 }),
+                  ...steppedConnector({ x: 298, y: 28, width: 46, height: 16 }),
+                  dotMark({ x: 18, y: 58 }),
+                  dotMark({ x: 64, y: 72 }),
+                  dotMark({ x: 110, y: 48 }),
+                  dotMark({ x: 156, y: 56 }),
+                  dotMark({ x: 202, y: 34 }),
+                  dotMark({ x: 248, y: 44 }),
+                  dotMark({ x: 294, y: 24 }),
+                  dotMark({ x: 340, y: 40 }),
+                ],
+              ),
+              hStack({
+                width: 428,
+                justifyContent: "space_between",
+                children: [
+                  ...[
+                    ["M1", "56"],
+                    ["M2", "44"],
+                    ["M3", "67"],
+                    ["M4", "61"],
+                    ["M5", "79"],
+                    ["M6", "71"],
+                    ["M7", "86"],
+                    ["M8", "73"],
+                  ].map(([label, score]) =>
+                    vStack({
+                      width: 42,
+                      gap: 4,
+                      alignItems: "center",
+                      children: [
+                        text({
+                          content: label,
+                          fill: "$--foreground",
+                          fontFamily: "$--font-secondary",
+                          fontSize: 11,
+                          fontWeight: "700",
+                          lineHeight: 1,
+                        }),
+                        text({
+                          content: score,
+                          fill: "$--muted-foreground",
+                          fontFamily: "$--font-secondary",
+                          fontSize: 11,
+                          fontWeight: "500",
+                          lineHeight: 1,
+                        }),
+                      ],
+                    }),
+                  ),
+                ],
+              }),
+              bodyText("效率最高：M7", 428, 13),
+            ],
+          }),
+          vStack({
+            width: 476,
+            height: 264,
+            gap: 16,
+            padding: 24,
+            fill: "$--card",
+            stroke: { align: "inside", thickness: 1, fill: "$--border" },
+            cornerRadius: 26,
+            children: [
+              hStack({
+                width: 428,
+                justifyContent: "space_between",
+                alignItems: "center",
+                children: [
+                  titleText("今日复习队列", 220, 26),
                   pill({ label: "Ebbinghaus", fill: "$--secondary" }),
                 ],
               }),
               ...[
                 ["call in sick", "第 3 天 · 需要在新场景中再用一次"],
                 ["give you a heads-up", "第 7 天 · 适合做口语复述"],
-                ["under the weather", "第 14 天 · 已掌握，但建议继续复现"],
-                ["sort of / kind of", "第 1 天 · 连读识别还不稳定"],
+                ["not feeling great", "第 1 天 · 建议先做委婉语气辨析"],
               ].map(([title, meta], index) =>
                 queueRow({
                   title,
@@ -1697,25 +2008,25 @@ const makeReviewScreen = (x, y) =>
             ],
           }),
           vStack({
-            width: 484,
-            height: 470,
+            width: 476,
+            height: 316,
             gap: 18,
             padding: 24,
             fill: "$--card",
             stroke: { align: "inside", thickness: 1, fill: "$--border" },
             cornerRadius: 26,
             children: [
-              titleText("精听笔记卡", 220, 28),
+              titleText("精听笔记卡", 220, 26),
               vStack({
-                width: 436,
+                width: 428,
                 gap: 14,
                 padding: 22,
                 fill: "$--secondary",
                 cornerRadius: 22,
                 children: [
                   sectionLabel("Shareable note", 140),
-                  titleText("每一句，都陪你听懂", 392, 34),
-                  bodyText("本次材料：Soft language at work\n掌握表达：call in sick / give you a heads-up / not feeling great\n完成模块：6 / 8", 392, 14, "$--foreground"),
+                  titleText("每一句，都陪你听懂", 384, 34),
+                  bodyText("本次材料：Soft language at work\n掌握表达：call in sick / give you a heads-up / not feeling great\n完成模块：6 / 8", 384, 14, "$--foreground"),
                   hStack({
                     gap: 10,
                     children: [
@@ -1726,12 +2037,12 @@ const makeReviewScreen = (x, y) =>
                   }),
                 ],
               }),
-              bodyText("这张卡可以作为社交裂变素材，也能成为用户自己愿意保存的学习记忆点。", 436, 14),
+              bodyText("这张卡既是分享素材，也是用户愿意保存下来的单节课学习记录。", 428, 14),
               hStack({
                 gap: 12,
                 children: [
                   button({ label: "分享学习卡", variant: "primary", width: 170 }),
-                  button({ label: "查看月报", variant: "outline", width: 140 }),
+                  button({ label: "返回工作台", variant: "outline", width: 140 }),
                 ],
               }),
             ],
@@ -1752,7 +2063,7 @@ const document = {
         name: "LingMate Web Prototype Canvas",
         clip: true,
         width: 3240,
-        height: 2920,
+        height: 3600,
         fill: "$--canvas",
         layout: "none",
       },
@@ -1760,7 +2071,7 @@ const document = {
         topLabel({ index: "01", name: "Home / Import", x: 120, y: 68 }),
         topLabel({ index: "02", name: "AI Analysis", x: 1680, y: 68 }),
         topLabel({ index: "03", name: "Learning Workspace", x: 120, y: 1448 }),
-        topLabel({ index: "04", name: "Report / Review", x: 1680, y: 1448 }),
+        topLabel({ index: "04", name: "Learning Report", x: 1680, y: 1448 }),
         makeHomeScreen(120, 120),
         makeAnalysisScreen(1680, 120),
         makeWorkspaceScreen(120, 1500),
