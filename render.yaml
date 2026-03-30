@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: lingmate-demo-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: python --version
+    startCommand: python main.py
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: LINGMATE_ANALYSIS_PROVIDER
+        value: mock
